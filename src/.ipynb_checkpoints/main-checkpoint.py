@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import shap
 from src.predict import predict_churn
+from typing import Literal
 app = FastAPI()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -20,26 +21,31 @@ col = ['gender', 'SeniorCitizen', 'Partner', 'Dependents',
        'StreamingTV', 'StreamingMovies', 'Contract', 'PaperlessBilling',
        'PaymentMethod', 'MonthlyCharges', 'TotalCharges']
 
+
+
 class Customer(BaseModel):
-    gender: str
-    SeniorCitizen:int
-    Partner: str
-    Dependents: str
-    tenure:int
-    PhoneService: str
-    MultipleLines: str
-    InternetService: str
-    OnlineSecurity: str
-    OnlineBackup: str
-    DeviceProtection: str
-    TechSupport: str
-    StreamingTV: str
-    StreamingMovies: str
-    Contract: str
-    PaperlessBilling: str
-    PaymentMethod: str
-    MonthlyCharges:float
-    TotalCharges:float
+    gender: Literal["Male", "Female"] = Field(..., example="Male")
+    SeniorCitizen: int = Field(..., example=0, description="0 = No, 1 = Yes")
+    Partner: Literal["Yes", "No"] = Field(..., example="Yes")
+    Dependents: Literal["Yes", "No"] = Field(..., example="No")
+    tenure: int = Field(..., example=12)
+    PhoneService: Literal["Yes", "No"] = Field(..., example="Yes")
+    MultipleLines: Literal["Yes", "No", "No phone service"] = Field(..., example="No")
+    InternetService: Literal["DSL", "Fiber optic", "No"] = Field(..., example="Fiber optic")
+    OnlineSecurity: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
+    OnlineBackup: Literal["Yes", "No", "No internet service"] = Field(..., example="Yes")
+    DeviceProtection: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
+    TechSupport: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
+    StreamingTV: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
+    StreamingMovies: Literal["Yes", "No", "No internet service"] = Field(..., example="No")
+    Contract: Literal["Month-to-month", "One year", "Two year"] = Field(..., example="Month-to-month")
+    PaperlessBilling: Literal["Yes", "No"] = Field(..., example="Yes")
+    PaymentMethod: Literal[
+        "Electronic check", "Mailed check", 
+        "Bank transfer (automatic)", "Credit card (automatic)"
+    ] = Field(..., example="Electronic check")
+    MonthlyCharges: float = Field(..., example=70.5)
+    TotalCharges: float = Field(..., example=845.5)
 
 preprocessor = model.named_steps['preprocessor']
 lgbm_model = model.named_steps['classifier']
@@ -59,7 +65,29 @@ def human_explain(feature_name, impact):
     return text
     
 @app.post("/predict")
-def predict(customer: Customer):
+def predict(customer: Customer = Body(
+    example={
+        "gender": "Male",
+        "SeniorCitizen": 0,
+        "Partner": "Yes",
+        "Dependents": "No",
+        "tenure": 12,
+        "PhoneService": "Yes",
+        "MultipleLines": "No",
+        "InternetService": "Fiber optic",
+        "OnlineSecurity": "No",
+        "OnlineBackup": "Yes",
+        "DeviceProtection": "No",
+        "TechSupport": "No",
+        "StreamingTV": "No",
+        "StreamingMovies": "No",
+        "Contract": "Month-to-month",
+        "PaperlessBilling": "Yes",
+        "PaymentMethod": "Electronic check",
+        "MonthlyCharges": 70.5,
+        "TotalCharges": 845.5
+    }
+)):
     df, prediction, pred_proba = predict_churn(customer.dict())
     data = pd.DataFrame([customer.dict()],columns = col)
     data['TotalCharges'] = pd.to_numeric(data['TotalCharges'],errors = 'coerce')

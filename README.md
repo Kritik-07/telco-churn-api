@@ -204,7 +204,16 @@ streamlit run app/streamlit_app.py
 ```
 
 ---
+## Live API
 
+Live API: https://telco-churn-api-iv8s.onrender.com/docs
+## Live Demo
+
+- **Streamlit App (UI):** https://tel-churn-app.streamlit.app  
+- **FastAPI Backend:** https://telco-churn-api-iv8s.onrender.com  
+- **API Docs:** https://telco-churn-api-iv8s.onrender.com/docs
+
+---
 ## API Endpoint
 
 ### POST `/predict`

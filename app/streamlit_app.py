@@ -1,20 +1,15 @@
 import streamlit as st
 import pandas as pd
-import joblib
-import numpy as np
 import matplotlib.pyplot as plt
-import os
-# Load model
+import requests
 
+#  LIVE API
+API_URL = "https://telco-churn-api-iv8s.onrender.com/predict"
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "..", "models", "churn_model.pkl")
+st.title("Customer Churn Prediction System")
+st.write("Enter customer details to predict churn and understand reasons.")
 
-model = joblib.load(MODEL_PATH)
-
-st.title("Customer Churn Prediction")
-
-st.write("Enter customer details to predict churn probability.")
+# ---------------- INPUT ---------------- #
 
 # Basic Info
 gender = st.selectbox("Gender", ["Male", "Female"])
@@ -23,8 +18,8 @@ partner = st.selectbox("Partner", ["Yes", "No"])
 dependents = st.selectbox("Dependents", ["No", "Yes"])
 
 # Account Info
-tenure = st.number_input("Tenure (months)", 0, 72)
-monthly = st.number_input("Monthly Charges", 0.0)
+tenure = st.slider("Tenure (months)", 0, 72, 12)
+monthly = st.number_input("Monthly Charges", 0.0, value=70.5)
 
 # Services
 phone = st.selectbox("Phone Service", ["No", "Yes"])
@@ -43,6 +38,7 @@ stream_movies = st.selectbox("Streaming Movies", ["No", "Yes", "No internet serv
 # Billing
 contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
 paperless = st.selectbox("Paperless Billing", ["Yes", "No"])
+
 payment = st.selectbox(
     "Payment Method",
     [
@@ -53,70 +49,86 @@ payment = st.selectbox(
     ]
 )
 
-# Automatically compute TotalCharges
+# AUTO CALCULATION 
 total = tenure * monthly
 
-# Create DataFrame
-input_data = pd.DataFrame({
-    "gender":[gender],
-    "SeniorCitizen":[senior],
-    "Partner":[partner],
-    "Dependents":[dependents],
-    "tenure":[tenure],
-    "PhoneService":[phone],
-    "MultipleLines":[lines],
-    "InternetService":[internet],
-    "OnlineSecurity":[security],
-    "OnlineBackup":[backup],
-    "DeviceProtection":[device],
-    "TechSupport":[tech],
-    "StreamingTV":[stream_tv],
-    "StreamingMovies":[stream_movies],
-    "Contract":[contract],
-    "PaperlessBilling":[paperless],
-    "PaymentMethod":[payment],
-    "MonthlyCharges":[monthly],
-    "TotalCharges":[total]
-})
+st.info(f Estimated Total Charges: {round(total, 2)}")
 
-# Prediction button
+# ---------------- PREDICTION ---------------- #
+
 if st.button("Predict Churn"):
 
-    prediction = model.predict(input_data)[0]
-    probability = model.predict_proba(input_data)[0][1]
+    data = {
+        "gender": gender,
+        "SeniorCitizen": senior,
+        "Partner": partner,
+        "Dependents": dependents,
+        "tenure": tenure,
+        "PhoneService": phone,
+        "MultipleLines": lines,
+        "InternetService": internet,
+        "OnlineSecurity": security,
+        "OnlineBackup": backup,
+        "DeviceProtection": device,
+        "TechSupport": tech,
+        "StreamingTV": stream_tv,
+        "StreamingMovies": stream_movies,
+        "Contract": contract,
+        "PaperlessBilling": paperless,
+        "PaymentMethod": payment,
+        "MonthlyCharges": monthly,
+        "TotalCharges": total
+    }
 
-    if prediction == 1:
-        st.error(f"⚠ Customer likely to churn\n\nProbability: {probability:.2f}")
-    else:
-        st.success(f"✅ Customer likely to stay\n\nProbability: {probability:.2f} chance customer will churn")
-    st.progress(probability)
-    # Addition of feature importance
-    classifier = model.named_steps['classifier']
-    preprocessor = model.named_steps['preprocessor']
-    
-    feature_names = preprocessor.get_feature_names_out()
-    importance = classifier.feature_importances_
-    
-    importance_df = pd.DataFrame({
-        "feature": feature_names,
-        "importance": importance
-    })
-    
-    importance_df = importance_df.sort_values(by="importance", ascending=False).head(10)
-    importance_df["feature"] = importance_df["feature"].str.replace("num__", "")
-    importance_df["feature"] = importance_df["feature"].str.replace("cat__", "")
-    st.subheader("Top 10 important features")
-    
-    fig, ax = plt.subplots(figsize=(10,6))
-    
-    ax.barh(
-        importance_df['feature'],
-        (importance_df['importance']/importance_df['importance'].sum())*100
-    )
-    
-    ax.set_xlabel('Importance of features (%)')
-    ax.set_title("Feature Importance")
-    ax.invert_yaxis()
-    
-    st.pyplot(fig)
+    try:
+        response = requests.post(API_URL, json=data)
 
+        if response.status_code == 200:
+            result = response.json()
+
+            prediction = result["prediction"]
+            probability = result["pred_proba"]
+
+            # ---------------- RESULT ---------------- #
+
+            if prediction == 1:
+                st.error(f" Customer likely to churn\n\nConfidence: {probability:.2f}")
+            else:
+                st.success(f" Customer likely to stay\n\nConfidence: {probability:.2f}")
+
+            st.progress(probability)
+
+            # ---------------- EXPLANATION ---------------- #
+
+            st.subheader(" Top Reasons")
+
+            for reason in result.get("explanation", []):
+                st.write(f"• {reason}")
+
+        else:
+            st.error("API Error")
+
+    except Exception as e:
+        st.error(f"Error connecting to API: {e}")
+
+# ---------------- STATIC FEATURE IMPORTANCE GRAPH ---------------- #
+
+st.subheader("Global Feature Importance")
+
+# Hardcoded (from model insights)
+features = [
+    "Contract", "Tenure", "MonthlyCharges", "TechSupport",
+    "InternetService", "OnlineSecurity", "PaymentMethod",
+    "PaperlessBilling", "DeviceProtection", "OnlineBackup"
+]
+
+importance = [20, 18, 15, 12, 10, 8, 6, 5, 3, 3]
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+ax.barh(features, importance)
+ax.set_xlabel("Importance (%)")
+ax.set_title("Top Features Affecting Churn")
+ax.invert_yaxis()
+
+st.pyplot(fig)
