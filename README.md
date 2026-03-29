@@ -1,5 +1,11 @@
 # Telco Customer Churn Prediction System
 
+## Live API
+
+- **FastAPI Backend:** https://telco-churn-api-iv8s.onrender.com  
+- **API Docs:** https://telco-churn-api-iv8s.onrender.com/docs
+---
+
 An end-to-end Machine Learning system to predict customer churn and provide **human-readable explanations** using SHAP. The system includes a **FastAPI backend**, **Streamlit frontend**, and a **production-ready ML pipeline**.
 
 ---
@@ -134,13 +140,16 @@ The system uses SHAP to:
 ### Example Output
 
 ```json
+## 📌 Sample Response
+
+```json
 {
-  "churn": false,
-  "confidence": 0.19,
-  "top_reasons": [
-    "Month-to-month Contract increases churn risk",
-    "High MonthlyCharges increases churn risk",
-    "Long tenure reduces churn risk"
+  "prediction": 0,
+  "label": "No Churn",
+  "probability": 0.198,
+  "explanation": [
+    "Contract is increasing churn risk by 0.24%",
+    "Tenure is reducing churn risk 0.23%"
   ]
 }
 ```
@@ -203,15 +212,6 @@ Open: http://127.0.0.1:8000/docs
 streamlit run app/streamlit_app.py
 ```
 
----
-## Live API
-
-Live API: https://telco-churn-api-iv8s.onrender.com/docs
-## Live Demo
-
-- **Streamlit App (UI):** https://tel-churn-app.streamlit.app  
-- **FastAPI Backend:** https://telco-churn-api-iv8s.onrender.com  
-- **API Docs:** https://telco-churn-api-iv8s.onrender.com/docs
 
 ---
 ## API Endpoint

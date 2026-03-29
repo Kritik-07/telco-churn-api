@@ -1,11 +1,12 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Body
+from pydantic import BaseModel, Field
 import joblib
 import pandas as pd
 import os
 import shap
 from src.predict import predict_churn
 from typing import Literal
+
 app = FastAPI()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -59,11 +60,18 @@ def human_explain(feature_name, impact):
     else:
         name = feature_name
     if impact > 0:
-        text = f"{name} increase the churn risk by {round(impact,3)}"
+        text = f"{name} is increasing the churn risk by {round(impact,3)}"
     else:
-        text = f"{name} decrease the churn risk by {round(impact,3)}"
+        text = f"{name} is reducing the churn risk by {round(impact,3)}"
     return text
-    
+
+@app.get('/')
+def home():
+    return {
+        "message": "Telco Chrun Prediction API",
+        "docs":"/docs"
+    }
+
 @app.post("/predict")
 def predict(customer: Customer = Body(
     example={
@@ -89,12 +97,10 @@ def predict(customer: Customer = Body(
     }
 )):
     df, prediction, pred_proba = predict_churn(customer.dict())
-    data = pd.DataFrame([customer.dict()],columns = col)
-    data['TotalCharges'] = pd.to_numeric(data['TotalCharges'],errors = 'coerce')
 
 
     #transform data using pipeline (Converts your raw input into model-ready numeric format)
-    processed_data = preprocessor.transform(data)
+    processed_data = preprocessor.transform(df)
 
     #get shap values
     shap_result = explainer(processed_data)
@@ -108,8 +114,9 @@ def predict(customer: Customer = Body(
         human_explain(features_names[i],shap_values[i]) for i in top_indices
         ]
     return {'prediction': int(prediction),
-           'pred_proba': f"{round(pred_proba,3)}% it will be churn",
-        'Explaination': explaination
+            'label': "Churn" if prediction == 1 else "No churn",
+            'pred_proba': round(pred_proba,3),
+            'Explanation': explaination
            }
 
 
