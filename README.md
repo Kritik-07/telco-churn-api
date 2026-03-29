@@ -251,6 +251,12 @@ streamlit run app/streamlit_app.py
 
 ---
 
+## Highlights
+
+- Built and deployed an end-to-end ML system
+- Integrated explainable AI (SHAP)
+- Designed clean API with structured output
+
 ## Future Improvements
 
 * Docker containerization

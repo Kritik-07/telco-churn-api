@@ -5,24 +5,28 @@ import pandas as pd
 import os
 import shap
 from src.predict import predict_churn
-from typing import Literal
+from typing import Literal, List
 
 app = FastAPI()
+
+# ---------------- LOAD MODEL ---------------- #
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(BASE_DIR, "..", "models", "churn_model.pkl")
 
 model = joblib.load(MODEL_PATH)
 
+# ---------------- FEATURES ---------------- #
 
+col = [
+    'gender', 'SeniorCitizen', 'Partner', 'Dependents',
+    'tenure', 'PhoneService', 'MultipleLines', 'InternetService',
+    'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport',
+    'StreamingTV', 'StreamingMovies', 'Contract', 'PaperlessBilling',
+    'PaymentMethod', 'MonthlyCharges', 'TotalCharges'
+]
 
-col = ['gender', 'SeniorCitizen', 'Partner', 'Dependents',
-       'tenure', 'PhoneService', 'MultipleLines', 'InternetService',
-       'OnlineSecurity', 'OnlineBackup', 'DeviceProtection', 'TechSupport',
-       'StreamingTV', 'StreamingMovies', 'Contract', 'PaperlessBilling',
-       'PaymentMethod', 'MonthlyCharges', 'TotalCharges']
-
-
+# ---------------- INPUT MODEL ---------------- #
 
 class Customer(BaseModel):
     gender: Literal["Male", "Female"] = Field(..., example="Male")
@@ -42,82 +46,99 @@ class Customer(BaseModel):
     Contract: Literal["Month-to-month", "One year", "Two year"] = Field(..., example="Month-to-month")
     PaperlessBilling: Literal["Yes", "No"] = Field(..., example="Yes")
     PaymentMethod: Literal[
-        "Electronic check", "Mailed check", 
+        "Electronic check", "Mailed check",
         "Bank transfer (automatic)", "Credit card (automatic)"
     ] = Field(..., example="Electronic check")
     MonthlyCharges: float = Field(..., example=70.5)
     TotalCharges: float = Field(..., example=845.5)
 
+# ---------------- RESPONSE MODEL ---------------- #
+
+class PredictionResponse(BaseModel):
+    prediction: int
+    label: str
+    probability: float
+    explanation: List[str]
+
+# ---------------- SHAP SETUP ---------------- #
+
 preprocessor = model.named_steps['preprocessor']
 lgbm_model = model.named_steps['classifier']
-explainer  = shap.TreeExplainer(lgbm_model)
-features_names = preprocessor.get_feature_names_out()
+explainer = shap.TreeExplainer(lgbm_model)
+feature_names = preprocessor.get_feature_names_out()
+
+# ---------------- EXPLANATION FUNCTION ---------------- #
 
 def human_explain(feature_name, impact):
-    feature_name = feature_name.replace("cat__","").replace("num__","")
+    feature_name = feature_name.replace("cat__", "").replace("num__", "")
+
     if "_" in feature_name:
         name = feature_name.split("_")[0]
     else:
         name = feature_name
-    if impact > 0:
-        text = f"{name} is increasing the churn risk by {round(impact,3)}"
-    else:
-        text = f"{name} is reducing the churn risk by {round(impact,3)}"
-    return text
 
-@app.get('/')
+    if impact > 0:
+        return f"{name} is increasing churn risk"
+    else:
+        return f"{name} is reducing churn risk"
+
+# ---------------- ROOT ENDPOINT ---------------- #
+
+@app.get("/")
 def home():
     return {
-        "message": "Telco Chrun Prediction API",
-        "docs":"/docs"
+        "message": "Telco Churn Prediction API",
+        "docs": "/docs"
     }
 
-@app.post("/predict")
-def predict(customer: Customer = Body(
-    example={
-        "gender": "Male",
-        "SeniorCitizen": 0,
-        "Partner": "Yes",
-        "Dependents": "No",
-        "tenure": 12,
-        "PhoneService": "Yes",
-        "MultipleLines": "No",
-        "InternetService": "Fiber optic",
-        "OnlineSecurity": "No",
-        "OnlineBackup": "Yes",
-        "DeviceProtection": "No",
-        "TechSupport": "No",
-        "StreamingTV": "No",
-        "StreamingMovies": "No",
-        "Contract": "Month-to-month",
-        "PaperlessBilling": "Yes",
-        "PaymentMethod": "Electronic check",
-        "MonthlyCharges": 70.5,
-        "TotalCharges": 845.5
+# ---------------- PREDICT ENDPOINT ---------------- #
+
+@app.post(
+    "/predict",
+    response_model=PredictionResponse,
+    responses={
+        200: {
+            "content": {
+                "application/json": {
+                    "example": {
+                        "prediction": 0,
+                        "label": "No Churn",
+                        "probability": 0.198,
+                        "explanation": [
+                            "Contract is increasing churn risk",
+                            "Tenure is reducing churn risk"
+                        ]
+                    }
+                }
+            }
+        }
     }
-)):
+)
+def predict(customer: Customer = Body(...)):
+    
+    # Get prediction
     df, prediction, pred_proba = predict_churn(customer.dict())
 
-
-    #transform data using pipeline (Converts your raw input into model-ready numeric format)
+    # Transform input
     processed_data = preprocessor.transform(df)
 
-    #get shap values
+    # SHAP values
     shap_result = explainer(processed_data)
-
-    #take first row
     shap_values = shap_result.values[0]
 
+    # Top 5 important features
     top_indices = abs(shap_values).argsort()[-5:][::-1]
 
-    explaination = [
-        human_explain(features_names[i],shap_values[i]) for i in top_indices
-        ]
-    return {'prediction': int(prediction),
-            'label': "Churn" if prediction == 1 else "No churn",
-            'pred_proba': round(pred_proba,3),
-            'Explanation': explaination
-           }
+    explanation = [
+        human_explain(feature_names[i], shap_values[i]) for i in top_indices
+    ]
+
+    return {
+        "prediction": int(prediction),
+        "label": "Churn" if prediction == 1 else "No Churn",
+        "probability": round(pred_proba, 3),
+        "explanation": explanation
+    }
 
 
 #conda install -c conda-forge shap
